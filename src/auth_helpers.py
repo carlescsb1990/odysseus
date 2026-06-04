@@ -41,6 +41,25 @@ def _auth_disabled() -> bool:
     return os.getenv("AUTH_ENABLED", "true").lower() == "false"
 
 
+def resolve_session_owner(user: Optional[str]) -> str:
+    """Resolve the owner string a session-ownership check should match against.
+
+    ``user`` is the result of ``effective_user(request)``. When a real user is
+    present, return it. When it is falsy:
+      - if the operator disabled auth, the caller is the anonymous single-user
+        owner (""), the same value sessions are stored with in that mode;
+      - otherwise the request is genuinely unauthenticated → 403.
+
+    Mirrors ``require_user`` so per-session routes honor AUTH_ENABLED=false
+    instead of 403-ing on every action (issue #2553).
+    """
+    if user:
+        return user
+    if _auth_disabled():
+        return ""
+    raise HTTPException(403, "Authentication required")
+
+
 def require_user(request: Request) -> str:
     """FastAPI dependency: reject unauthenticated callers when the upstream
     auth middleware was bypassed unexpectedly (e.g. SSRF from a sibling
